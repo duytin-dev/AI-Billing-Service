@@ -31,6 +31,7 @@ export class AuthService {
             },
         })
         return {
+            message: 'Register successfully',
             id: user.id,
             email: user.email,
             name: user.name,
@@ -46,10 +47,27 @@ export class AuthService {
                 password: true,
             },
         })
-        if (!user) {
-            throw new BadRequestException('Account do not exist !')
-        }
-        const checkPass = bcrypt.compare(loginDto.password, user.password)
 
+        if (!user) {
+            throw new BadRequestException('Account does not exist!')
+        }
+
+        const checkPass = await bcrypt.compare(
+            loginDto.password,
+            user.password,
+        )
+
+        if (!checkPass) {
+            throw new BadRequestException('Password is incorrect!')
+        }
+
+        return {
+            message: 'Login successfully',
+            user: {
+                id: user.id,
+                email: user.email,
+                name: user.name,
+            },
+        }
     }
 }
