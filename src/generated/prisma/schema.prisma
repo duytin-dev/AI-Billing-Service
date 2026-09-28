@@ -1,0 +1,330 @@
+// This is your Prisma schema file.
+// Learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id    String  @id @default(uuid())
+  email String  @unique
+  name  String?
+
+  stripeCustomerId String? @unique
+
+  subscriptions       Subscription[]
+  paymentMethods      PaymentMethod[]
+  creditAccount       CreditAccount?
+  billingTransactions BillingTransaction[]
+  addonPurchases      AddonPurchase[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum BillingCycle {
+  MONTHLY
+  ANNUALLY
+}
+
+model SubscriptionPlan {
+  id          String  @id @default(uuid())
+  name        String
+  description String?
+  isActive    Boolean @default(true)
+
+  prices SubscriptionPrice[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SubscriptionPrice {
+  id                 String @id @default(uuid())
+  subscriptionPlanId String
+
+  billingCycle   BillingCycle
+  price          Decimal
+  currency       String       @default("VND")
+  monthlyCredits Int
+  stripePriceId  String?      @unique
+
+  isActive Boolean @default(true)
+
+  subscriptionPlan SubscriptionPlan @relation(fields: [subscriptionPlanId], references: [id])
+
+  subscriptions Subscription[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([subscriptionPlanId])
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  EXPIRED
+}
+
+model Subscription {
+  id                  String @id @default(uuid())
+  userId              String
+  subscriptionPriceId String
+
+  stripeSubscriptionId String? @unique
+
+  status SubscriptionStatus @default(ACTIVE)
+
+  startedAt          DateTime
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  nextCreditRefillAt DateTime
+
+  retryCount    Int       @default(0)
+  firstFailedAt DateTime?
+
+  canceledAt DateTime?
+  endedAt    DateTime?
+
+  user User @relation(fields: [userId], references: [id])
+
+  subscriptionPrice SubscriptionPrice @relation(fields: [subscriptionPriceId], references: [id])
+
+  billingTransactions BillingTransaction[]
+
+  creditAllocations CreditAllocation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+model PaymentMethod {
+  id     String @id @default(uuid())
+  userId String
+
+  stripePaymentMethodId String @unique
+
+  type     String
+  brand    String?
+  last4    String?
+  expMonth Int?
+  expYear  Int?
+
+  isDefault Boolean @default(false)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+enum CreditSource {
+  SUBSCRIPTION
+  ADDON
+}
+
+model CreditAllocation {
+  id String @id @default(uuid())
+
+  creditAccountId String
+  source          CreditSource
+
+  totalAmount     Int
+  remainingAmount Int
+
+  expiresAt DateTime?
+
+  subscriptionId  String?
+  addonPurchaseId String?
+
+  creditAccount CreditAccount @relation(fields: [creditAccountId], references: [id], onDelete: Cascade)
+
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id])
+
+  addonPurchase AddonPurchase? @relation(fields: [addonPurchaseId], references: [id])
+
+  transactions CreditTransaction[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([creditAccountId])
+  @@index([subscriptionId])
+  @@index([addonPurchaseId])
+  @@index([expiresAt])
+}
+
+model CreditAccount {
+  id     String @id @default(uuid())
+  userId String @unique
+
+  subscriptionBalance Int @default(0)
+  addonBalance        Int @default(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  allocations  CreditAllocation[]
+  transactions CreditTransaction[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum CreditTransactionType {
+  SUBSCRIPTION_ALLOCATION
+  ADDON_PURCHASE
+  CONSUMPTION
+  ADJUSTMENT
+  REFUND
+}
+
+model CreditTransaction {
+  id                 String  @id @default(uuid())
+  creditAccountId    String
+  creditAllocationId String?
+
+  amount      Int
+  type        CreditTransactionType
+  description String?
+
+  balanceBefore Int
+  balanceAfter  Int
+
+  referenceId     String?
+  addonPurchaseId String?
+
+  creditAccount CreditAccount @relation(fields: [creditAccountId], references: [id], onDelete: Cascade)
+
+  creditAllocation CreditAllocation? @relation(fields: [creditAllocationId], references: [id])
+
+  addonPurchase AddonPurchase? @relation(fields: [addonPurchaseId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([creditAccountId])
+  @@index([creditAllocationId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+enum BillingTransactionType {
+  SUBSCRIPTION_PAYMENT
+  ADDON_PAYMENT
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+model BillingTransaction {
+  id              String                 @id @default(uuid())
+  userId          String
+  subscriptionId  String?
+  addonPurchaseId String?
+  type            BillingTransactionType
+  status          PaymentStatus          @default(PENDING)
+
+  amount   Decimal @db.Decimal(10, 2)
+  currency String  @default("usd")
+
+  stripePaymentIntentId String? @unique
+  stripeInvoiceId       String? @unique
+  stripeChargeId        String?
+
+  failureReason String?
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscription  Subscription?  @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  addonPurchase AddonPurchase? @relation(fields: [addonPurchaseId], references: [id])
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([userId])
+  @@index([subscriptionId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model CreditAddon {
+  id   String @id @default(uuid())
+  name String @unique
+
+  credits  Int
+  price    Decimal @db.Decimal(10, 2)
+  currency String  @default("usd")
+
+  stripePriceId String @unique
+
+  isActive Boolean @default(true)
+
+  purchases AddonPurchase[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AddonPurchase {
+  id            String @id @default(uuid())
+  userId        String
+  creditAddonId String
+
+  credits  Int
+  amount   Decimal       @db.Decimal(10, 2)
+  currency String        @default("usd")
+  status   PaymentStatus @default(PENDING)
+
+  stripePaymentIntentId String? @unique
+
+  user  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  addon CreditAddon @relation(fields: [creditAddonId], references: [id])
+
+  creditTransactions  CreditTransaction[]
+  creditAllocations   CreditAllocation[]
+  billingTransactions BillingTransaction[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([creditAddonId])
+  @@index([status])
+}
+
+enum WebhookEventStatus {
+  PENDING
+  PROCESSED
+  FAILED
+}
+
+model StripeWebhookEvent {
+  id            String @id @default(uuid())
+  stripeEventId String @unique
+
+  eventType String
+
+  status WebhookEventStatus @default(PENDING)
+
+  processedAt  DateTime?
+  errorMessage String?
+
+  createdAt DateTime @default(now())
+
+  @@index([eventType])
+  @@index([status])
+}
