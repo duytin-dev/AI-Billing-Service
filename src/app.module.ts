@@ -3,6 +3,9 @@ import { createObserveModule } from '@nestjs/observe';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { PrismaModule } from './prisma/prisma.module.js';
+import { BillingModule } from './billing/billing.module.js';
+import { CustomerModule } from './customer/customer.module.js';
+import { ConfigModule } from '@nestjs/config';
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
 @Module({
@@ -15,6 +18,11 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
       appSecret: 'YOUR_APP_SECRET',
       serviceId: 'billing-service',
     }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+    }),
+    BillingModule,
+    CustomerModule,
   ],
   controllers: [AppController],
   providers: [AppService],
