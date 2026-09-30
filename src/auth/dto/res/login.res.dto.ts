@@ -3,5 +3,4 @@ export class LoginDtoResponse {
     name: string | null;
     email: string;
     accessToken: string;
-    refreshToken: string;
 }
