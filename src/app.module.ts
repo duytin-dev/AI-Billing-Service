@@ -7,6 +7,7 @@ import { BillingModule } from './billing/billing.module.js';
 import { CustomerModule } from './customer/customer.module.js';
 import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module.js';
+import { CreditModule } from './credit/credit.module.js';
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
 @Module({
@@ -25,6 +26,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     BillingModule,
     CustomerModule,
     AuthModule,
+    CreditModule,
   ],
   controllers: [AppController],
   providers: [AppService],
