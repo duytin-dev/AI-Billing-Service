@@ -26,7 +26,7 @@ export class CreditService {
     constructor(private readonly prisma: PrismaService) { }
 
     /**
-     * Lấy hoặc khởi tạo ví CreditAccount cho user nếu chưa có
+     * Initialize a credit account for the user if it doesn't exist
      */
     async getOrCreateCreditAccount(userId: string) {
         let account = await this.prisma.creditAccount.findUnique({
@@ -47,7 +47,7 @@ export class CreditService {
     }
 
     /**
-     * Lấy số dư Credit hiện tại của người dùng
+     * Get the current credit balance of the user, including subscription and addon balances.
      */
     async getBalance(userId: string): Promise<CreditBalanceDto> {
         const account = await this.getOrCreateCreditAccount(userId);
@@ -59,17 +59,26 @@ export class CreditService {
     }
 
     /**
-     * Nạp Credit vào tài khoản (từ gói Subscription hoặc gói mua lẻ Addon)
+     * Allocate credits to the user's account (from Subscription or Addon purchases)
      */
     async allocateCredits(params: AllocateCreditsParams) {
-        const { userId, amount, source, subscriptionId, addonPurchaseId, expiresAt, description } = params;
+        const {
+            userId,
+            amount,
+            source,
+            subscriptionId,
+            addonPurchaseId,
+            expiresAt,
+            description,
+        } = params;
 
         if (amount <= 0) {
-            throw new BadRequestException('Allocation amount must be greater than 0');
+            throw new BadRequestException(
+                'Allocation amount must be greater than 0',
+            );
         }
 
         return this.prisma.$transaction(async (tx) => {
-
             let account = await tx.creditAccount.findUnique({
                 where: { userId },
             });
@@ -87,17 +96,34 @@ export class CreditService {
             const balanceBefore = account.subscriptionBalance + account.addonBalance;
             const isSubscription = source === CreditSource.SUBSCRIPTION;
 
+            // Subscription credit cũ không được rollover sang tháng mới
+            if (isSubscription) {
+                await tx.creditAllocation.updateMany({
+                    where: {
+                        creditAccountId: account.id,
+                        source: CreditSource.SUBSCRIPTION,
+                        remainingAmount: {
+                            gt: 0,
+                        },
+                    },
+                    data: {
+                        remainingAmount: 0,
+                    },
+                });
+            }
+
             const updatedAccount = await tx.creditAccount.update({
-                where: { id: account.id },
+                where: {
+                    id: account.id,
+                },
                 data: {
-                    subscriptionBalance: isSubscription ? { increment: amount } : undefined,
+                    subscriptionBalance: isSubscription ? amount : undefined,
                     addonBalance: !isSubscription ? { increment: amount } : undefined,
                 },
             });
 
             const balanceAfter = updatedAccount.subscriptionBalance + updatedAccount.addonBalance;
 
-            // 1. Ghi nhận đợt phân bổ Credit (CreditAllocation)
             const allocation = await tx.creditAllocation.create({
                 data: {
                     creditAccountId: account.id,
@@ -110,7 +136,6 @@ export class CreditService {
                 },
             });
 
-            // 2. Ghi nhật ký biến động số dư (CreditTransaction)
             const transaction = await tx.creditTransaction.create({
                 data: {
                     creditAccountId: account.id,
@@ -120,7 +145,9 @@ export class CreditService {
                         : CreditTransactionType.ADDON_PURCHASE,
                     balanceBefore,
                     balanceAfter,
-                    description: description || `Allocated ${amount} credits from ${source}`,
+                    description:
+                        description ||
+                        `Allocated ${amount} credits from ${source}`,
                     creditAllocationId: allocation.id,
                     addonPurchaseId,
                 },
@@ -134,10 +161,7 @@ export class CreditService {
         });
     }
 
-    /**
-     * Tiêu trừ Credit (Ví dụ khi người dùng gọi AI generation/prompt)
-     * Ưu tiên trừ subscriptionBalance trước (vì hết hạn theo tháng), sau đó mới trừ addonBalance
-     */
+
     async consumeCredits(params: ConsumeCreditsParams) {
         const { userId, amount, description, referenceId } = params;
 
@@ -232,9 +256,7 @@ export class CreditService {
         });
     }
 
-    /**
-     * Lấy lịch sử biến động Credit (Audit log / Transaction history)
-     */
+
     async getTransactionHistory(userId: string, limit = 50): Promise<CreditTransactionResponseDto[]> {
         const account = await this.prisma.creditAccount.findUnique({
             where: { userId },

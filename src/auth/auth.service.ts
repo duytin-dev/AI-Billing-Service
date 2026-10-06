@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, UnauthorizedException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -40,13 +40,15 @@ export class AuthService {
 
         const customer = await this.customerService.handleCreateCustomer({ email: normalizedEmail, name: registerDto.name.trim(), });
 
-        const user = await this.userService.handleCreateUser({
+        const user = await this.userService.create({
             email: normalizedEmail,
             name: registerDto.name.trim(),
             password: hashedPassword,
             stripeCustomerId: customer.id,
         });
-
+        if (!user) {
+            throw new NotFoundException('User creation failed');
+        }
         try {
             await this.creditService.allocateCredits({
                 userId: user.id,
