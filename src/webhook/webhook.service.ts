@@ -12,9 +12,16 @@ export class WebhookService {
   ) { }
 
   async handleEvent(event: Stripe.Event) {
+    console.log('EVENT RECEIVED:', event.type);
+
     switch (event.type) {
       case 'customer.subscription.created':
-        await this.handleSubscriptionCreated(event.data.object);
+        console.log('HANDLING SUBSCRIPTION CREATED');
+
+        await this.handleSubscriptionCreated(
+          event.data.object,
+        );
+
         break;
       default:
         console.log(
@@ -23,6 +30,11 @@ export class WebhookService {
     }
   }
   private async handleSubscriptionCreated(subscription: Stripe.Subscription,) {
+    console.log(
+      'SUBSCRIPTION METADATA:',
+      subscription.metadata,
+    );
+
 
     const userId = subscription.metadata.userId;
     const subscriptionPriceId = subscription.metadata.subscriptionPriceId;
@@ -47,7 +59,7 @@ export class WebhookService {
       item.current_period_end * 1000,
     );
 
-    await this.prisma.subscription.create({
+    const result = await this.prisma.subscription.create({
       data: {
         userId,
         subscriptionPriceId,
@@ -65,7 +77,7 @@ export class WebhookService {
       }
 
     });
-
+    console.log('DATABASE RESULT:', result);
     console.log(`Subscription created: ${subscription.id} for user ${userId}`,);
   }
 

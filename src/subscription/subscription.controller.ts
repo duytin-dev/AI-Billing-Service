@@ -20,8 +20,4 @@ export class SubscriptionController {
     async createCheckout(@CurrentUser('userId') userId: string, @Body() dto: CreateCheckoutDto,) {
         return this.subscriptionService.createCheckout(userId, dto.subscriptionPriceId);
     }
-    @Post('free')
-    async subscribeFree(@CurrentUser('userId') userId: string,) {
-        return this.subscriptionService.subscribeFree(userId);
-    }
 }
