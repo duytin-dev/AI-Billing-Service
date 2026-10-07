@@ -3,6 +3,12 @@ export class HttpExceptionFilter implements ExceptionFilter {
     //error response
 
     catch(exception: unknown, host: ArgumentsHost) {
+        console.error(
+            '[Backend error]',
+            exception instanceof Error
+                ? exception.message
+                : 'Unknown error',
+        );
         const ctx = host.switchToHttp();
         const response = ctx.getResponse();
         const status = exception instanceof HttpException ? exception.getStatus() : 500;

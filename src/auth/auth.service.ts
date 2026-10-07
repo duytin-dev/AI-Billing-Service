@@ -1,8 +1,7 @@
-import { ConflictException, Injectable, Logger, UnauthorizedException, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, UnauthorizedException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import { CreditSource } from '../../generated/prisma/client.js';
 import { CustomerService } from '../customer/customer.service.js';
 import { UserService } from '../user/user.service.js';
 import { CreditService } from '../credit/credit.service.js';
@@ -13,11 +12,9 @@ import { RegisterDtoResponse } from './dto/res/register.res.dto.js';
 import { JwtPayload } from './interfaces/jwt-payload.interface.js';
 
 const SALT_ROUNDS = 10;
-const INITIAL_FREE_CREDITS = 50;
 
 @Injectable()
 export class AuthService {
-    private readonly logger = new Logger(AuthService.name);
 
     constructor(
         private readonly jwtService: JwtService,
@@ -36,6 +33,7 @@ export class AuthService {
             throw new ConflictException('Email already exists');
         }
 
+
         const hashedPassword = await bcrypt.hash(registerDto.password, SALT_ROUNDS);
 
         const customer = await this.customerService.handleCreateCustomer({ email: normalizedEmail, name: registerDto.name.trim(), });
@@ -49,17 +47,6 @@ export class AuthService {
         if (!user) {
             throw new NotFoundException('User creation failed');
         }
-        try {
-            await this.creditService.allocateCredits({
-                userId: user.id,
-                amount: INITIAL_FREE_CREDITS,
-                source: CreditSource.SUBSCRIPTION,
-                description: 'Initial 50 free credits upon registration',
-            });
-        } catch (creditError) {
-            this.logger.error(`Failed to allocate initial credits for user ${user.id}`, creditError);
-        }
-
         return {
             id: user.id,
             email: user.email,
@@ -95,4 +82,4 @@ export class AuthService {
         const payload: JwtPayload = { sub: userId, email };
         return this.jwtService.signAsync(payload);
     }
-}   
+}

@@ -34,7 +34,8 @@ import { JwtAuthGuard } from './jwt-auth.guard.js';
         JwtAuthGuard,
     ],
     exports: [
-        JwtAuthGuard
+        JwtAuthGuard,
+        PassportModule,
     ],
 
 })
