@@ -1,6 +1,6 @@
 import { IsUUID } from 'class-validator';
 
-export class CreateCheckoutDto {
+export class SubscriptionDto {
     @IsUUID()
     subscriptionPriceId!: string;
 }
